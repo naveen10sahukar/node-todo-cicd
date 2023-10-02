@@ -1,0 +1,64 @@
+pipeline {
+    agent any
+    
+    tools {
+        jdk "jdk17"
+        maven "maven3"
+    }
+    
+    environment {
+        SCANNER_HOME=tool 'sonar-scanner'
+    }
+
+    stages {
+        stage('Git Checkout') {
+            steps {
+                git 'https://github.com/naveensahukar10/node-todo-cicd.git'
+            }
+        }
+        
+        stage('Sonarqube Analysis') {
+            steps {
+                withSonarQubeEnv('sonar-server') {
+                    sh ''' $SCANNER_HOME/bin/sonar-scanner -Dsonar.projectName=node-todo \
+                    -Dsonar.java.binaries=. \
+                    -Dsonar.projectKey=node-todo '''
+                }
+            }
+        }
+        
+        stage('Docker Build') {
+            steps {
+                sh "docker build -t node-todo ."
+            }
+        }
+        
+        stage('Docker Tag') {
+            steps {
+                sh "docker tag node-todo naveensahukar/node-todo:latest"
+            }
+        }
+        
+        stage('Trivy Scan Image') {
+            steps {
+                sh "trivy image naveensahukar/node-todo:latest"
+            }
+        }
+        
+        stage('Docker Push') {
+            steps {
+                script {
+                    withDockerRegistry(credentialsId: 'DockerHubCredentials', toolName: 'docker') {
+                        sh "docker push naveensahukar/node-todo:latest"
+                    }
+                }
+            }
+        }
+        
+        stage('Deploy Application') {
+            steps {
+                sh "docker run -d -p 8000:8000 --name node-todo-container naveensahukar/node-todo:latest"
+            }
+        }
+    }
+}
